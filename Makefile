@@ -4,12 +4,22 @@ KVER  ?= $(shell uname -r)
 KDIR  := /lib/modules/$(KVER)/build
 PWD   := $(shell pwd)
 
+# Kernel builds configured with Clang (notably CachyOS 7.2.0) export
+# Clang-only flags through the external-module build interface.  Select the
+# same compiler automatically instead of passing those flags to GCC.
+KBUILD_COMPILER :=
+ifneq ($(wildcard $(KDIR)/.config),)
+ifneq ($(filter y,$(shell sed -n 's/^CONFIG_CC_IS_CLANG=//p' $(KDIR)/.config)),)
+KBUILD_COMPILER := LLVM=1
+endif
+endif
+
 MDIR  := /lib/modules/$(KVER)/kernel/drivers/platform/x86
 MODNAME := linuwu_sense
 REAL_USER := $(shell echo $${SUDO_USER:-$$(whoami)})
 
 all:
-	$(MAKE) -C $(KDIR) M=$(PWD) modules
+	$(MAKE) -C $(KDIR) M=$(PWD) $(KBUILD_COMPILER) modules
 
 	# --- auto sign block ---
 	# Check if keys exist before attempting to sign
@@ -33,7 +43,7 @@ all:
 	# --- end auto sign block ---
 
 clean:
-	$(MAKE) -C $(KDIR) M=$(PWD) clean
+	$(MAKE) -C $(KDIR) M=$(PWD) $(KBUILD_COMPILER) clean
 
 uninstall:
 	@sudo rm -f /etc/modules-load.d/$(MODNAME).conf
@@ -102,4 +112,3 @@ install: all
 		echo "Warning: Could not detect predator_sense or nitro_sense in sysfs."; \
 	fi
 	@echo "Module $(MODNAME) installed and configured to load at boot."
-
